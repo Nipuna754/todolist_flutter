@@ -15,6 +15,9 @@ Those four are read from the CDCE MIS (`http://10.40.129.2/cdcesys/mis_1/`).
 Everything else on the form is left blank for the student to complete by hand,
 including the correction grids under each name.
 
+**Deployment status:** nothing is deployed yet and no CDCE system has been
+changed — see [DEPLOY-STATUS.md](DEPLOY-STATUS.md).
+
 ## Read this before deploying
 
 This module was written without access to the CDCE network, so two things are
