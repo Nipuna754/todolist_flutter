@@ -38,12 +38,20 @@ the tool to students. Nothing in this module writes to the MIS.
 
 ## Install
 
+Deploying to the CDCE server? Follow **[DEPLOY.md](DEPLOY.md)** (server side,
+over SSH) and **[DEPLOY-WINDOWS.md](DEPLOY-WINDOWS.md)** (upload and smoke test
+from Windows PowerShell). The release archive bundles `vendor/`, so the server
+needs no Composer.
+
+From a checkout:
+
 ```bash
 composer install --no-dev --optimize-autoloader
 cp config/config.example.php config/config.php
 # edit config/config.php
 mkdir -p var && chown www-data:www-data var    # rate-limit counters and the audit log
-php tools/check_mis.php
+php tools/preflight.php      # can this server run it?
+php tools/check_mis.php      # is the config right?
 ```
 
 Point the vhost's document root at `public/`. Only `public/` may be
@@ -108,8 +116,10 @@ src/FormLayout.php          the coordinates — the only file a layout change to
 src/RateLimiter.php         per-client attempt cap
 src/AuditLog.php            append-only issue log, NICs masked
 templates/                  the registrar's blank form, unchanged
+tools/preflight.php         check the server can run it, before any config
 tools/calibrate.php         render a sample without the MIS
-tools/check_mis.php         pre-flight the config against the live MIS
+tools/check_mis.php         verify the config against the live MIS
+tools/try_nic.php           show how a NIC is parsed, no database needed
 tests/run.php               the test suite
 docs/template-geometry.md   where every coordinate came from
 ```

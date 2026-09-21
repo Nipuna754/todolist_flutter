@@ -1,0 +1,3 @@
+# public/ is the only directory that may be served.
+Options -Indexes
+Require all granted

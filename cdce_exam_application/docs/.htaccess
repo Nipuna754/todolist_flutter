@@ -1,0 +1,4 @@
+# Never web-reachable. Denied here as well as in the parent .htaccess, so that
+# a misconfigured Alias or a rewrite module that is switched off cannot expose
+# credentials, the audit log or the MIS lookup code.
+Require all denied

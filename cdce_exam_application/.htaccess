@@ -1,0 +1,25 @@
+# Only needed when this package sits INSIDE the web document root, i.e. the
+# files are at /.../tools/apply_examination2/ and the URL reaches them
+# directly. If your Apache config Aliases the URL to this package's public/
+# directory instead, that is safer and this file is not used.
+#
+# Everything except public/ is denied, and requests are rewritten into public/
+# so the URL stays /tools/apply_examination2/ with no /public/ in it.
+
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # config/ holds the MIS password, var/ holds the audit log. Never served.
+    RewriteRule ^(config|src|tools|tests|docs|var|vendor|templates)(/|$) - [F,L]
+
+    # Send everything else into public/, once.
+    RewriteCond %{REQUEST_URI} !/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# Belt and braces, in case mod_rewrite is unavailable.
+<FilesMatch "\.(json|lock|log|md|sqlite|txt)$">
+    Require all denied
+</FilesMatch>
