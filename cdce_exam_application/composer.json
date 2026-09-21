@@ -1,0 +1,19 @@
+{
+    "name": "cdce-pdn/exam-application-2026",
+    "description": "BA (External) 100 Level repeat examination application download with auto-printed student particulars from the CDCE MIS.",
+    "type": "project",
+    "require": {
+        "php": ">=8.0",
+        "ext-pdo": "*",
+        "setasign/fpdf": "^1.8",
+        "setasign/fpdi": "^2.6"
+    },
+    "autoload": {
+        "psr-4": {
+            "Cdce\\ExamApplication\\": "src/"
+        }
+    },
+    "config": {
+        "sort-packages": true
+    }
+}
