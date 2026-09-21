@@ -120,14 +120,14 @@ docs/template-geometry.md   where every coordinate came from
 php tests/run.php
 ```
 
-27 tests, no test framework needed. The MIS tests run against an in-memory
+29 tests, no test framework needed. The MIS tests run against an in-memory
 SQLite database shaped like the MIS table, so the suite passes off the CDCE
 network. They cover NIC conversion in both directions, matching a NIC stored in
 the other format or with stray spaces, the eligibility filter turning away a
 200 Level student, refusing an ambiguous match, rejecting a table name from
-config that is not a plain identifier, the rate-limit window, and that a
-generated application keeps both pages and carries all four particulars with
-long names wrapped.
+config that is not a plain identifier, refusing to fold a 2000s NIC down to a
+1900 number, the rate-limit window, and that a generated application keeps both
+pages and carries all four particulars with long names wrapped.
 
 ## Adjusting the printing
 
@@ -135,6 +135,16 @@ long names wrapped.
 outlined, using sample data and no database. `--long` uses the longest
 plausible names. See `docs/template-geometry.md` for the coordinates and the
 re-calibration steps.
+
+## Checking National ID numbers
+
+`php tools/try_nic.php 931234567V 200012345678` shows how each number is
+parsed, which spellings the MIS will be compared against, and how it appears in
+the audit log. It needs no database, so it can be run anywhere. Feed it a list
+with `--file=nics.txt`.
+
+To check numbers against the live MIS instead, use
+`php tools/check_mis.php <nic>`.
 
 ## Notes for whoever maintains this
 

@@ -80,8 +80,23 @@ final class Nic
     }
 
     /**
+     * Whether this number has a meaningful old-format equivalent.
+     *
+     * The old format encodes the year of birth in two digits and was only ever
+     * issued for 19xx births. Folding a 2000s number down to 9 digits would
+     * produce a number that reads as a 1900 birth, so for those the 12 digit
+     * form is the only spelling worth comparing.
+     */
+    public function hasOldFormatEquivalent(): bool
+    {
+        return (int) substr($this->newFormat(), 0, 4) < 2000;
+    }
+
+    /**
      * The 9 digits of the old form, without the check letter. The letter cannot
      * be recovered from a 12 digit number, so comparisons use this prefix.
+     *
+     * Only meaningful when hasOldFormatEquivalent() is true.
      */
     public function oldFormatDigits(): string
     {
@@ -101,15 +116,17 @@ final class Nic
      */
     public function lookupVariants(): array
     {
-        $digits = $this->oldFormatDigits();
+        $variants = [$this->normalised, $this->newFormat()];
 
-        return array_values(array_unique([
-            $this->normalised,
-            $this->newFormat(),
-            $digits . 'V',
-            $digits . 'X',
-            $digits,
-        ]));
+        // Without this guard a student born in 2000 would also be looked up
+        // under a 1900 number, which could collide with a mistyped record and
+        // hand them somebody else's name and registration number.
+        if ($this->hasOldFormatEquivalent()) {
+            $digits = $this->oldFormatDigits();
+            array_push($variants, $digits . 'V', $digits . 'X', $digits);
+        }
+
+        return array_values(array_unique($variants));
     }
 
     /** Masked for logs, so that a NIC number is never written out in full. */

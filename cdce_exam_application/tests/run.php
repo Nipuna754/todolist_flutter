@@ -94,6 +94,18 @@ test('old and new forms of one number share their lookup variants', function ():
     }
 });
 
+test('does not fold a 2000s number down to a 1900 number', function (): void {
+    $nic = Nic::parse('200012345678');
+    assertTrue(!$nic->hasOldFormatEquivalent(), 'a 2000 birth has no old format equivalent');
+    assertSame(['200012345678'], $nic->lookupVariants());
+});
+
+test('still folds a 1900s number down to the old format', function (): void {
+    $nic = Nic::parse('199912304567');
+    assertTrue($nic->hasOldFormatEquivalent(), 'a 1999 birth does have an old format equivalent');
+    assertTrue(in_array('991234567V', $nic->lookupVariants(), true), 'the old form is missing');
+});
+
 test('keeps a female day-of-year (500 added) valid', function (): void {
     assertSame('935234567V', Nic::parse('935234567V')->value());
 });
