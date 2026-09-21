@@ -25,10 +25,25 @@ final class StudentRecord
     {
         return new self(
             self::clean((string) ($row['registration_no'] ?? '')),
-            self::clean((string) ($row['nic'] ?? '')),
+            self::tidyNationalId(self::clean((string) ($row['nic'] ?? ''))),
             self::clean((string) ($row['name_with_initials'] ?? '')),
             self::clean((string) ($row['name_in_full'] ?? '')),
         );
+    }
+
+    /**
+     * NIC numbers in the MIS carry spaces and dashes from years of hand entry.
+     * Printing "88 5234-567 X" on an application that goes to the registrar
+     * looks like a mistake, so the number is tidied to the plain form - keeping
+     * whichever format the MIS holds, because that is the number on the card in
+     * the student's pocket.
+     *
+     * Anything that is not recognisable as a NIC is printed as recorded rather
+     * than dropped: the office needs to see what the MIS actually holds.
+     */
+    private static function tidyNationalId(string $value): string
+    {
+        return Nic::tryParse($value)?->value() ?? $value;
     }
 
     /**

@@ -120,7 +120,7 @@ docs/template-geometry.md   where every coordinate came from
 php tests/run.php
 ```
 
-29 tests, no test framework needed. The MIS tests run against an in-memory
+32 tests, no test framework needed. The MIS tests run against an in-memory
 SQLite database shaped like the MIS table, so the suite passes off the CDCE
 network. They cover NIC conversion in both directions, matching a NIC stored in
 the other format or with stray spaces, the eligibility filter turning away a
@@ -148,9 +148,13 @@ To check numbers against the live MIS instead, use
 
 ## Notes for whoever maintains this
 
-- **The NIC is printed as the MIS holds it**, old or new format, since that is
-  the number on record. To normalise every application to the 12-digit form,
-  print `Nic::parse($student->nationalId)->newFormat()` in
+- **The NIC is printed in whichever format the MIS holds**, old or new, since
+  that is the number on the card in the student's pocket. It is tidied first,
+  so a value stored as `88 5234-567 X` prints as `885234567X` rather than
+  putting hand-entry noise on an official form; a value that is not
+  recognisable as a NIC is printed exactly as recorded, so the office can see
+  what the MIS holds. To normalise every application to the 12-digit form
+  instead, print `Nic::parse($student->nationalId)->newFormat()` in
   `ApplicationService::generate()`.
 - **The dotted `AE/BA/…` placeholder is covered, not deleted.** It is painted
   over with a white rectangle, so it is invisible on screen and in print, but a

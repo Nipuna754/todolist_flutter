@@ -140,6 +140,20 @@ test('squashes the double spaces the MIS is full of', function (): void {
     assertSame('KURUKULASURIYA ARACHCHIGE NIMAL PERERA', $student->nameInFull);
 });
 
+test('tidies a NIC that the MIS stored with spaces and dashes', function (): void {
+    $student = StudentRecord::fromRow(['registration_no' => 'AE/BA/20/0009', 'nic' => '88 5234-567 x']);
+    assertSame('885234567X', $student->nationalId);
+});
+
+test('keeps the format the MIS holds rather than converting it', function (): void {
+    assertSame('931234567V', StudentRecord::fromRow(['nic' => '931234567V'])->nationalId);
+    assertSame('200012345678', StudentRecord::fromRow(['nic' => '200012345678'])->nationalId);
+});
+
+test('prints an unrecognisable NIC as recorded instead of dropping it', function (): void {
+    assertSame('PENDING', StudentRecord::fromRow(['nic' => ' PENDING '])->nationalId);
+});
+
 test('reports which particulars are missing', function (): void {
     $student = StudentRecord::fromRow(['registration_no' => 'AE/BA/21/1234', 'nic' => '199312304567']);
     assertSame(['Name with Initials', 'Name in Full'], $student->missingFields());
