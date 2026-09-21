@@ -47,10 +47,12 @@ try {
     exit(1);
 }
 
-// A NIC that cannot exist still exercises the table, the four columns and the
-// eligibility clause, without reading anybody's record.
+// A structurally valid NIC that no living student can hold: year 1900, day 1,
+// serial 0000. It exercises the table, the four columns and the eligibility
+// clause without reading anybody's record. It must parse, or the probe never
+// reaches the query.
 try {
-    $repository->findEligibleStudent(Nic::parse('000000000V'));
+    $repository->findEligibleStudent(Nic::parse('000010000V'));
     report('table, columns and eligibility clause resolve', true);
 } catch (Throwable $e) {
     report('table, columns and eligibility clause resolve', false, $e->getMessage());

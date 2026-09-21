@@ -120,6 +120,8 @@ tools/preflight.php         check the server can run it, before any config
 tools/calibrate.php         render a sample without the MIS
 tools/check_mis.php         verify the config against the live MIS
 tools/try_nic.php           show how a NIC is parsed, no database needed
+tools/discover_mis.sql      read-only: find the real MIS table and columns
+tools/check_data_quality.sql read-only: will the tool work on this data?
 tests/run.php               the test suite
 docs/template-geometry.md   where every coordinate came from
 ```

@@ -93,12 +93,61 @@ Three things must be set to real values:
    to a 100 Level repeat form. Too permissive and any student in the MIS can
    download one.
 
-To find the real names:
+### Finding the real table and column names
+
+Two read-only scripts ship with the package. Neither writes anything, and
+neither returns a student row - only schema and counts, so their output is safe
+to paste into a ticket or a chat.
 
 ```bash
-mysql -h 10.40.129.2 -u <user> -p -e "SHOW TABLES" cdcesys
-mysql -h 10.40.129.2 -u <user> -p -e "DESCRIBE student" cdcesys
+mysql -h 10.40.129.2 -u <user> -p -D cdcesys --table < tools/discover_mis.sql
 ```
+
+That lists the databases, the biggest tables, and every column that looks like
+a NIC, a registration number, a name, or something the eligibility rule could
+use. Fill the six names it gives you into the top of the second script, along
+with the eligibility clause you intend to use, then:
+
+```bash
+mysql -h 10.40.129.2 -u <user> -p -D cdcesys --table < tools/check_data_quality.sql
+```
+
+That one answers whether the tool will actually work on this data:
+
+| Section | What a bad answer means |
+|---|---|
+| 1. candidates selected | A count near zero or near the whole table means the eligibility rule is wrong |
+| 2. NIC formats | `UNRECOGNISED` or `MISSING` rows are students who can never download a form |
+| 3. incomplete records | Each one is a student the office must fix before they can apply |
+| 4. duplicate NICs | Each blocks that student until the MIS is corrected |
+| 5. 2000s NIC collisions | Above zero confirms the old-format guard in `src/Nic.php` is load-bearing |
+| 6. eligibility columns | Prints ready-to-run queries showing what values those columns really hold |
+
+Section 6 matters most: run what it prints and set the constants in
+`config.php` to values that exist in the data, rather than assumed ones.
+
+### The MIS account
+
+Create one that can only read the student table:
+
+```sql
+CREATE USER 'cdce_readonly'@'<web-server-ip>' IDENTIFIED BY '<strong-password>';
+GRANT SELECT ON cdcesys.<student-table> TO 'cdce_readonly'@'<web-server-ip>';
+FLUSH PRIVILEGES;
+```
+
+Confirm it cannot write - this must be refused:
+
+```bash
+mysql -h 10.40.129.2 -u cdce_readonly -p -D cdcesys \
+      -e "UPDATE <student-table> SET full_name='x' WHERE 1=0;"
+# ERROR 1142 (42000): UPDATE command denied to user 'cdce_readonly'...
+```
+
+If the MIS database credentials are not to hand, the MIS web application at
+`http://10.40.129.2/cdcesys/mis_1/` has them in its own config file - but
+create a separate read-only account rather than reusing the MIS application's,
+which will have write access.
 
 ---
 
