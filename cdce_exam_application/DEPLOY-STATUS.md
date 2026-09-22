@@ -21,6 +21,13 @@ Everything was tested against throwaway fixtures: an in-memory SQLite database
 for the test suite, and a local MariaDB holding eight fabricated student rows,
 which was dropped afterwards. No real student data was ever read.
 
+## Continuing in a different Claude conversation
+
+`HANDOFF.md` holds a self-contained prompt to paste into a fresh chat, covering
+what the tool does, what is already settled, what is still unknown and the
+security checks that must not be skipped. Attach `apply_examination2.tar.gz` to
+that message, since a chat session cannot read this repository.
+
 ## Resuming
 
 1. Read `DEPLOY.md` (server side, over SSH) and `DEPLOY-WINDOWS.md` (upload and
