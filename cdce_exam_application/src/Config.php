@@ -9,14 +9,20 @@ namespace Cdce\ExamApplication;
  */
 final class Config
 {
+    /** @var array<string, mixed> */
+    private $values;
+
     /** @param array<string, mixed> $values */
-    private function __construct(private readonly array $values)
+    private function __construct(array $values)
     {
+        $this->values = $values;
     }
 
     public static function load(?string $path = null): self
     {
-        $path ??= dirname(__DIR__) . '/config/config.php';
+        if ($path === null) {
+            $path = dirname(__DIR__) . '/config/config.php';
+        }
 
         if (!is_readable($path)) {
             throw new \RuntimeException(
@@ -38,8 +44,13 @@ final class Config
         return new self($values);
     }
 
-    /** Dot-separated lookup, e.g. get('mis.table'). */
-    public function get(string $key, mixed $default = null): mixed
+    /**
+     * Dot-separated lookup, e.g. get('mis.table').
+     *
+     * @param mixed $default
+     * @return mixed
+     */
+    public function get(string $key, $default = null)
     {
         $value = $this->values;
         foreach (explode('.', $key) as $segment) {
@@ -52,7 +63,8 @@ final class Config
         return $value;
     }
 
-    public function require(string $key): mixed
+    /** @return mixed */
+    public function require(string $key)
     {
         $value = $this->get($key);
         if ($value === null || $value === '') {

@@ -1,6 +1,6 @@
 # Where this got to
 
-Last updated: 2026-09-21
+Last updated: 2026-09-22
 
 ## Nothing has been deployed yet
 
@@ -42,20 +42,25 @@ that message, since a chat session cannot read this repository.
    ```
 3. Start at `DEPLOY.md` **Step 0**.
 
+## Retargeted to the real server
+
+The package now targets **PHP 7.4** on a FreeBSD 12.2 jail, installed inside
+the document root at
+`/usr/local/www/cdce.pdn.ac.lk/tools/apply_examination2/`, with no CLI access.
+`config/config.example.php` carries the real `dbcdce2` schema and the
+eligibility rule.
+
 ## The two things still unknown
 
-These are the only placeholders left in the code, both in
-`config/config.example.php`, and both need someone with MIS access:
+1. **The MIS password** for `cdce_apply_ro`, and a `setup_token` for the
+   one-time web check. Both are set by hand in `config/config.php`.
+2. **Whether the eligibility rule selects the right people.** It is written and
+   covered by tests, but has never run against the live MIS. Check the
+   candidate count looks right before opening the tool to students.
 
-1. **The real table and column names.** Run
-   `tools/discover_mis.sql` against the MIS.
-2. **The eligibility rule** — which candidates are entitled to a 100 Level
-   repeat form for 2026. Run `tools/check_data_quality.sql` once the names from
-   step 1 are filled in. Getting this wrong in the permissive direction lets
-   any student in the MIS download a form.
-
-Both scripts are read-only and return schema and counts only, never a student
-row.
+`tools/discover_mis.sql` and `tools/check_data_quality.sql` remain for that;
+both are read-only and return schema and counts only, never a student row.
+They need a MySQL client, since the jail has no PHP CLI.
 
 ## Before announcing the tool to students
 
@@ -67,4 +72,7 @@ https://cdce.pdn.ac.lk/tools/apply_examination2/var/download.log
 ```
 
 The first holds the MIS password. If it returns 200, take the tool down before
-doing anything else.
+doing anything else. The package sits inside the document root, so `.htaccess`
+is the only thing denying these.
+
+`public/setup_check.php` must also be deleted once the tool is live.

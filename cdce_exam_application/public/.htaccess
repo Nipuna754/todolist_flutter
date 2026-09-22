@@ -1,3 +1,8 @@
 # public/ is the only directory that may be served.
-Options -Indexes
+Options -Indexes -MultiViews
+DirectoryIndex index.php
 Require all granted
+
+# setup_check.php is a one-time deployment aid and must be deleted once the
+# tool is live. It refuses to run unless setup_token is set in config.php,
+# but the right state for it is "not present on the server".

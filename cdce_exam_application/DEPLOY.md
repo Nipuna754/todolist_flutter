@@ -1,272 +1,255 @@
 # Deploying to https://cdce.pdn.ac.lk/tools/apply_examination2/
 
-Everything here is run on the CDCE web server over SSH. Dependencies are
-bundled, so the server needs **no Composer and no internet access**.
+Target: **FreeBSD 12.2 jail, Apache 2.4 + mod_php 7.4, mod_rewrite on,
+`AllowOverride All`, no root, no `Alias`, no PHP command line.**
 
-Work through it in order. Stop at the first `FAIL` — each step checks the one
-before it.
+The package sits **inside** the document root at:
 
----
-
-## Step 0 — Find out what the server looks like
-
-Run this first. The output decides how the rest is wired up.
-
-```bash
-php -v
-php -m | grep -E '^(pdo|pdo_mysql|mbstring|iconv|zlib)$'
-
-# Where does the site live, and where does /tools/ actually point?
-apachectl -S 2>/dev/null | grep -iE 'port 443|namevhost|DocumentRoot'
-grep -riE 'DocumentRoot|Alias' /etc/apache2/sites-enabled/ 2>/dev/null
-
-# Is the existing tool a directory under the document root?
-ls -la /var/www/html/tools/ 2>/dev/null
-
-# Needed only for the in-document-root layout in Step 5b
-apachectl -M 2>/dev/null | grep rewrite
+```
+/usr/local/www/cdce.pdn.ac.lk/tools/apply_examination2/
 ```
 
-If the server runs nginx rather than Apache, say so — the `.htaccess` files in
-this package do nothing under nginx and the equivalent goes in the server
-block.
+Dependencies are bundled, so nothing needs Composer or internet access on the
+server. Because there is no CLI, the checks that would normally run from a
+shell are done by a one-time web page instead.
 
 ---
 
-## Step 1 — Upload and extract
+## Step 1 — Back up what is there now
+
+```sh
+cd /usr/local/www/cdce.pdn.ac.lk/tools
+mv apply_examination2 apply_examination2.old-$(date +%Y%m%d)
+```
+
+Renaming rather than deleting is the whole rollback plan. Do not skip it.
+
+---
+
+## Step 2 — Upload and extract
 
 From your own machine:
 
-```bash
-scp apply_examination2.tar.gz <user>@cdce.pdn.ac.lk:/tmp/
+```powershell
+scp apply_examination2.tar.gz you@cdce.pdn.ac.lk:/tmp/
 ```
 
-On the server, extract **outside the document root** if you can. That is the
-safer layout, because only `public/` ever becomes reachable:
+On the server:
 
-```bash
-sudo mkdir -p /opt/cdce
-sudo tar xzf /tmp/apply_examination2.tar.gz -C /opt/cdce
-sudo chown -R root:www-data /opt/cdce/apply_examination2
-cd /opt/cdce/apply_examination2
-```
-
-If you have no root and must put it under the document root, extract to
-`/var/www/html/tools/` instead and follow Step 5b. Do not delete the existing
-`apply_examination2` directory — rename it, so you can roll back:
-
-```bash
-sudo mv /var/www/html/tools/apply_examination2 /var/www/html/tools/apply_examination2.old-$(date +%F)
+```sh
+cd /usr/local/www/cdce.pdn.ac.lk/tools
+tar xzf /tmp/apply_examination2.tar.gz
+ls apply_examination2/public/index.php    # must exist
 ```
 
 ---
 
-## Step 2 — Check the server can run it
+## Step 3 — Ownership and permissions
 
-```bash
-php tools/preflight.php
+Apache in a FreeBSD jail runs as **`www`**. Only `var/` needs to be writable;
+everything else can stay read-only to the web user.
+
+```sh
+cd /usr/local/www/cdce.pdn.ac.lk/tools/apply_examination2
+
+mkdir -p var
+chown -R root:wheel .
+chown -R www:www var
+chmod 750 var
+find . -type d ! -path './var*' -exec chmod 755 {} \;
+find . -type f -exec chmod 644 {} \;
 ```
 
-Every line must read `OK`, except `config/config.php exists`, which is a
-`WARN` until Step 3. If `pdo_mysql` is missing, install it
-(`sudo apt install php-mysql` or `yum install php-mysqlnd`) and reload PHP-FPM
-or Apache.
+`config/config.php` comes later and gets tighter permissions than the rest.
 
 ---
 
-## Step 3 — Point it at the MIS
+## Step 4 — Configure
 
-```bash
+```sh
 cp config/config.example.php config/config.php
-sudo chown root:www-data config/config.php
-sudo chmod 640 config/config.php      # the MIS password lives in this file
-nano config/config.php
+chown root:www config/config.php
+chmod 640 config/config.php
+vi config/config.php
 ```
 
-Three things must be set to real values:
+The MIS values are already filled in for `dbcdce2`:
 
-1. `mis.dsn`, `mis.username`, `mis.password` — use a MIS account with
-   **SELECT only**. This tool never writes to the MIS.
-2. `mis.table` and `mis.columns` — the real student table and the four
-   columns. The file ships with guesses (`student`, `reg_no`, `nic_no`, ...).
-3. `mis.eligibility.sql` — **the important one.** It decides who is entitled
-   to a 100 Level repeat form. Too permissive and any student in the MIS can
-   download one.
-
-### Finding the real table and column names
-
-Two read-only scripts ship with the package. Neither writes anything, and
-neither returns a student row - only schema and counts, so their output is safe
-to paste into a ticket or a chat.
-
-```bash
-mysql -h 10.40.129.2 -u <user> -p -D cdcesys --table < tools/discover_mis.sql
-```
-
-That lists the databases, the biggest tables, and every column that looks like
-a NIC, a registration number, a name, or something the eligibility rule could
-use. Fill the six names it gives you into the top of the second script, along
-with the eligibility clause you intend to use, then:
-
-```bash
-mysql -h 10.40.129.2 -u <user> -p -D cdcesys --table < tools/check_data_quality.sql
-```
-
-That one answers whether the tool will actually work on this data:
-
-| Section | What a bad answer means |
+| Setting | Value |
 |---|---|
-| 1. candidates selected | A count near zero or near the whole table means the eligibility rule is wrong |
-| 2. NIC formats | `UNRECOGNISED` or `MISSING` rows are students who can never download a form |
-| 3. incomplete records | Each one is a student the office must fix before they can apply |
-| 4. duplicate NICs | Each blocks that student until the MIS is corrected |
-| 5. 2000s NIC collisions | Above zero confirms the old-format guard in `src/Nic.php` is load-bearing |
-| 6. eligibility columns | Prints ready-to-run queries showing what values those columns really hold |
+| dsn | `mysql:host=10.40.129.2;port=3306;dbname=dbcdce2;charset=utf8mb4` |
+| username | `cdce_apply_ro` |
+| table | `tblstudent` |
+| columns | `reg_no`, `nic`, `name_ini`, `full_name` |
+| eligibility | BA programme, active, no open offence hold |
 
-Section 6 matters most: run what it prints and set the constants in
-`config.php` to values that exist in the data, rather than assumed ones.
+Two things you must set by hand:
 
-### The MIS account
+1. **`password`** — the MIS password for `cdce_apply_ro`.
+2. **`setup_token`** — a long random string for Step 6. Generate one anywhere:
 
-Create one that can only read the student table:
+   ```sh
+   openssl rand -hex 32
+   ```
+
+The MIS account needs `SELECT` on **both** `tblstudent` and `tbl_hold`
+(the eligibility rule reads the hold table) and nothing else:
 
 ```sql
-CREATE USER 'cdce_readonly'@'<web-server-ip>' IDENTIFIED BY '<strong-password>';
-GRANT SELECT ON cdcesys.<student-table> TO 'cdce_readonly'@'<web-server-ip>';
+CREATE USER 'cdce_apply_ro'@'<jail-ip>' IDENTIFIED BY '<strong-password>';
+GRANT SELECT ON dbcdce2.tblstudent TO 'cdce_apply_ro'@'<jail-ip>';
+GRANT SELECT ON dbcdce2.tbl_hold  TO 'cdce_apply_ro'@'<jail-ip>';
 FLUSH PRIVILEGES;
 ```
 
-Confirm it cannot write - this must be refused:
+Confirm it cannot write — this must be refused:
 
-```bash
-mysql -h 10.40.129.2 -u cdce_readonly -p -D cdcesys \
-      -e "UPDATE <student-table> SET full_name='x' WHERE 1=0;"
-# ERROR 1142 (42000): UPDATE command denied to user 'cdce_readonly'...
+```sql
+UPDATE tblstudent SET full_name = 'x' WHERE 1 = 0;
+-- ERROR 1142 (42000): UPDATE command denied to user 'cdce_apply_ro'...
 ```
-
-If the MIS database credentials are not to hand, the MIS web application at
-`http://10.40.129.2/cdcesys/mis_1/` has them in its own config file - but
-create a separate read-only account rather than reusing the MIS application's,
-which will have write access.
 
 ---
 
-## Step 4 — Verify the config against the live MIS
+## Step 5 — Check the jail can reach the MIS
 
-```bash
-php tools/check_mis.php
+The jail's network is not your desk's. Nothing works if this fails:
+
+```sh
+nc -z -v 10.40.129.2 3306
 ```
 
-This connects, resolves the table, all four columns and the eligibility clause,
-without reading anybody's record. Then test one real student — pick a candidate
-you know is eligible:
-
-```bash
-php tools/check_mis.php 931234567V
-```
-
-It writes the generated application to `var/`. **Open that PDF and check all
-four particulars before going further.** Then test the same student using the
-other NIC format (the 12-digit form if you used the 9-digit one, or the
-reverse); both must produce the same application.
-
-```bash
-sudo mkdir -p var && sudo chown www-data:www-data var && sudo chmod 750 var
-```
-
-`var/` holds the rate-limit counters and the audit log, so the web user must be
-able to write to it.
+If it is refused, the jail needs a firewall rule or the MIS needs to accept the
+jail's address. Sort that out before going further.
 
 ---
 
-## Step 5 — Wire up the URL
+## Step 6 — Run the one-time web check
 
-### 5a. Package outside the document root (preferred)
+There is no PHP command line in the jail, so the checks run as a web page. It
+is guarded by the `setup_token` you set in Step 4, and returns **404** to
+anyone without it.
 
-Add to the HTTPS vhost, then reload:
-
-```apache
-Alias /tools/apply_examination2 /opt/cdce/apply_examination2/public
-
-<Directory /opt/cdce/apply_examination2/public>
-    Options -Indexes
-    AllowOverride None
-    Require all granted
-</Directory>
+```
+https://cdce.pdn.ac.lk/tools/apply_examination2/setup_check.php?token=<your-token>
 ```
 
-```bash
-sudo apachectl configtest && sudo systemctl reload apache2
-```
+It verifies PHP 7.4, the extensions, the bundled `vendor/`, the template, a
+writable `var/`, the MIS connection, and that the table, the four columns and
+the eligibility clause all resolve.
 
-Nothing but `public/` is inside the document root, so `config/config.php` and
-`var/` cannot be fetched over the web at all.
-
-### 5b. Package inside the document root (fallback)
-
-The bundled `.htaccess` files already deny `config/`, `src/`, `tools/`,
-`tests/`, `vendor/`, `templates/` and `var/`, and rewrite requests into
-`public/` so the URL keeps its present shape. They need
-`AllowOverride All` on that directory and `mod_rewrite` enabled:
-
-```bash
-sudo a2enmod rewrite && sudo systemctl reload apache2
-```
-
-**This layout is only as safe as those `.htaccess` files**, so confirm Step 6's
-last two checks return 403 before you announce the tool.
+Then use the form on that page to generate a sample application for a
+candidate you know is eligible. **Open the PDF and check all four particulars
+land in the right boxes.** Try the same student in the other NIC format too —
+both must produce the same application.
 
 ---
 
-## Step 6 — Smoke test the live URL
+## Step 7 — The checks that must FAIL
 
-```bash
-BASE=https://cdce.pdn.ac.lk/tools/apply_examination2
+The package is inside the document root, so `.htaccess` is the only thing
+keeping the MIS password off the web. **Every one of these must return 403 or
+404.** If `config/config.php` returns 200, take the tool down immediately.
 
-# the form loads
-curl -sS -o /dev/null -w 'form: %{http_code}\n' $BASE/
-
-# a real eligible student gets a PDF
-COOKIE=$(mktemp)
-TOKEN=$(curl -sS -c $COOKIE $BASE/ | grep -o 'name="csrf" value="[a-f0-9]*"' | sed 's/.*value="//;s/"//')
-curl -sS -b $COOKIE -c $COOKIE -X POST $BASE/ \
-     -d "csrf=$TOKEN" -d "nic=931234567V" \
-     -o /tmp/live.pdf -D /tmp/live.headers -w 'download: %{http_code}\n'
-grep -i 'content-type\|content-disposition' /tmp/live.headers
-file /tmp/live.pdf        # must say: PDF document, 2 page(s)
-
-# credentials and the audit log must NOT be fetchable - both must be 403 or 404
-curl -sS -o /dev/null -w 'config:  %{http_code}\n' $BASE/config/config.php
-curl -sS -o /dev/null -w 'var:     %{http_code}\n' $BASE/var/download.log
+```sh
+B=https://cdce.pdn.ac.lk/tools/apply_examination2
+for p in config/config.php var/download.log src/MisRepository.php \
+         vendor/autoload.php tools/check_mis.php README.md composer.json; do
+  printf '%-32s ' "$p"
+  fetch -q -o /dev/null "$B/$p" 2>&1 | head -1 || echo denied
+done
 ```
 
-Open `/tmp/live.pdf` and confirm the four particulars print in the right boxes.
+Or from PowerShell:
+
+```powershell
+$B = 'https://cdce.pdn.ac.lk/tools/apply_examination2'
+foreach ($p in 'config/config.php','var/download.log','src/MisRepository.php',
+               'vendor/autoload.php','tools/check_mis.php','README.md','composer.json') {
+    try   { $r = Invoke-WebRequest "$B/$p" -UseBasicParsing -ErrorAction Stop
+            Write-Host ("{0,-32} {1}  <-- EXPOSED" -f $p, $r.StatusCode) -ForegroundColor Red }
+    catch { $c = $_.Exception.Response.StatusCode.value__
+            Write-Host ("{0,-32} {1}" -f $p, $c) -ForegroundColor $(if ($c -in 403,404) {'Green'} else {'Red'}) }
+}
+```
+
+One more, easy to miss: confirm PHP is actually **executing** rather than being
+served as text. If mod_php were misconfigured, every `.php` file under
+`public/` would be handed out as source.
+
+```sh
+fetch -q -o - "$B/" | head -c 40
+```
+
+It must start with `<!DOCTYPE html`, never `<?php`. Same check on the setup
+page, which must return **404** without a token once PHP is running:
+
+```sh
+fetch -q -o /dev/null "$B/setup_check.php"   # expect 404
+```
+
+`config/config.php` stays denied by `.htaccess` whatever happens to mod_php, so
+the password is not at risk either way — but source disclosure is silent, and
+this is the only thing that catches it.
+
+These rules were tested against Apache 2.4 with the package at this exact path,
+including `../` traversal, encoded slashes, double slashes and case variation.
+They hold only while `AllowOverride All` and `mod_rewrite` are on — the
+`.htaccess` denies everything outright if `mod_rewrite` is missing, so a module
+change fails closed rather than exposing the package.
+
+---
+
+## Step 8 — Delete the setup page
+
+```sh
+rm /usr/local/www/cdce.pdn.ac.lk/tools/apply_examination2/public/setup_check.php
+```
+
+Then blank `setup_token` in `config/config.php`. The page can read student
+records and its token has been sitting in your browser history and the Apache
+access log.
+
+---
+
+## Step 9 — Smoke test as a student
+
+```
+https://cdce.pdn.ac.lk/tools/apply_examination2/
+```
+
+Enter a real eligible NIC. You should get
+`BA-100-Level-2026-AE-BA-21-1234.pdf`, two pages, four particulars printed.
 
 ---
 
 ## Rolling back
 
-Nothing in this tool writes to the MIS, so a rollback is just restoring the URL:
-
-```bash
-# 5a: comment out the Alias block, then
-sudo apachectl configtest && sudo systemctl reload apache2
-
-# 5b:
-sudo rm -rf /var/www/html/tools/apply_examination2
-sudo mv /var/www/html/tools/apply_examination2.old-<date> \
-        /var/www/html/tools/apply_examination2
+```sh
+cd /usr/local/www/cdce.pdn.ac.lk/tools
+rm -rf apply_examination2
+mv apply_examination2.old-<date> apply_examination2
 ```
+
+Nothing in this tool writes to the MIS, so there is nothing else to undo.
 
 ---
 
-## After it is live
+## Notes for this server
 
-- Watch `var/download.log` for the first day. Each line is a timestamp, an
-  outcome (`issued`, `not-found`, `incomplete`, `ambiguous`, `mis-error`) and a
-  masked NIC.
-- A run of `incomplete` means the MIS is missing names for real candidates —
-  those students cannot get a form until the office fills them in.
-- A run of `ambiguous` means duplicate rows in the MIS under one NIC.
-- Many `not-found` from one client is someone guessing; the per-client cap
-  (`rate_limit` in config) slows that down.
+- **PHP 7.4.** The code targets 7.4 and was tested on 7.4.33; it also runs
+  unchanged on PHP 8. `src/compat.php` polyfills `str_starts_with` and
+  `str_contains`, and does nothing on PHP 8.
+- **MySQL 5.5.38.** The NIC lookup compares
+  `UPPER(REPLACE(REPLACE(nic,' ',''),'-',''))`, which cannot use an index —
+  MySQL 5.5 has no functional indexes. On a large `tblstudent` that is a full
+  scan per lookup. If downloads feel slow during application season, add a
+  normalised column maintained by a trigger and point `mis.columns.nic` at it.
+  An index on `tbl_hold(student_id, type, hold_status)` is worth having either
+  way.
+- **The eligibility rule reads two tables.** `tblstudent` and `tbl_hold`. A
+  candidate is refused only by an **open** offence hold (`hold_status = 1`);
+  a released hold, or a hold of another type, does not block them.
+- **`var/` must stay writable by `www`** or every download fails at the
+  rate-limiter. This is the most common cause of a working tool breaking after
+  a file copy.

@@ -35,7 +35,11 @@ function test(string $name, callable $body): void
     }
 }
 
-function assertSame(mixed $expected, mixed $actual, string $message = ''): void
+/**
+ * @param mixed $expected
+ * @param mixed $actual
+ */
+function assertSame($expected, $actual, string $message = ''): void
 {
     if ($expected !== $actual) {
         throw new RuntimeException(sprintf(
@@ -62,7 +66,7 @@ function assertThrows(string $class, callable $body): void
         if ($e instanceof $class) {
             return;
         }
-        throw new RuntimeException('expected ' . $class . ', got ' . $e::class . ': ' . $e->getMessage());
+        throw new RuntimeException('expected ' . $class . ', got ' . get_class($e) . ': ' . $e->getMessage());
     }
     throw new RuntimeException('expected ' . $class . ', nothing thrown');
 }
@@ -272,6 +276,92 @@ test('rejects an eligibility parameter that would rebind a NIC placeholder', fun
         RuntimeException::class,
         static fn () => (new MisRepository(misFixture(), $config))->findEligibleStudent(Nic::parse('931234567V'))
     );
+});
+
+echo "\nMIS lookup - the production eligibility rule\n";
+
+/**
+ * The real dbcdce2 shape: tblstudent plus a tbl_hold table, with the
+ * eligibility clause exactly as config.example.php ships it.
+ */
+function productionFixture(): PDO
+{
+    $pdo = new PDO('sqlite::memory:', null, null, [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+    ]);
+    $pdo->exec(
+        'CREATE TABLE tblstudent (
+            student_id INTEGER PRIMARY KEY, reg_no TEXT, nic TEXT, name_ini TEXT,
+            full_name TEXT, program_id INTEGER, status TEXT
+        )'
+    );
+    $pdo->exec('CREATE TABLE tbl_hold (hold_id INTEGER PRIMARY KEY, student_id INTEGER, type TEXT, hold_status INTEGER)');
+
+    $student = $pdo->prepare('INSERT INTO tblstudent VALUES (?, ?, ?, ?, ?, ?, ?)');
+    $student->execute([1, 'AE/BA/21/1234', '931234567V', 'K.A.N.M. PERERA', 'KURUKULASURIYA NIMAL PERERA', 1, 'active']);
+    $student->execute([2, 'AE/BA/21/7777', '901234567V', 'P.Q. HELD', 'PUNISHED QUIET HELD', 1, 'active']);
+    $student->execute([3, 'AE/BA/21/8888', '891234567V', 'R.S. OLDHOLD', 'RELEASED STUDENT OLDHOLD', 1, 'active']);
+    $student->execute([4, 'AE/BA/22/0001', '199512304567', 'S.D. SILVA', 'SAMARAWEERA DON SILVA', 2, 'active']);
+    $student->execute([5, 'AE/BA/19/0100', '801234567V', 'M.M. INACTIVE', 'MUDIYANSE INACTIVE', 1, 'inactive']);
+
+    $hold = $pdo->prepare('INSERT INTO tbl_hold VALUES (?, ?, ?, ?)');
+    $hold->execute([1, 2, 'offence', 1]);   // open offence hold - blocks
+    $hold->execute([2, 3, 'offence', 0]);   // released offence hold - must not block
+    $hold->execute([3, 3, 'library', 1]);   // a different hold type - must not block
+
+    return $pdo;
+}
+
+function productionConfig(): Config
+{
+    return Config::fromArray([
+        'mis' => [
+            'table' => 'tblstudent',
+            'columns' => [
+                'registration_no' => 'reg_no',
+                'nic' => 'nic',
+                'name_with_initials' => 'name_ini',
+                'name_in_full' => 'full_name',
+            ],
+            'eligibility' => [
+                'sql' => 'program_id = :program AND status = :status AND NOT EXISTS '
+                    . '(SELECT 1 FROM tbl_hold h WHERE h.student_id = tblstudent.student_id '
+                    . 'AND h.type = :hold_type AND h.hold_status = 1)',
+                'params' => ['program' => 1, 'status' => 'active', 'hold_type' => 'offence'],
+            ],
+        ],
+    ]);
+}
+
+test('issues a form to an eligible candidate with no hold', function (): void {
+    $student = (new MisRepository(productionFixture(), productionConfig()))->findEligibleStudent(Nic::parse('931234567V'));
+    assertTrue($student !== null, 'eligible candidate was refused');
+    assertSame('AE/BA/21/1234', $student->registrationNo);
+});
+
+test('refuses a candidate under an open offence hold', function (): void {
+    assertSame(null, (new MisRepository(productionFixture(), productionConfig()))->findEligibleStudent(Nic::parse('901234567V')));
+});
+
+test('a released offence hold does not block', function (): void {
+    $student = (new MisRepository(productionFixture(), productionConfig()))->findEligibleStudent(Nic::parse('891234567V'));
+    assertTrue($student !== null, 'a hold with hold_status = 0 wrongly blocked the student');
+    assertSame('AE/BA/21/8888', $student->registrationNo);
+});
+
+test('a hold of another type does not block', function (): void {
+    // Student 3 also carries an open library hold; only offence holds count.
+    $student = (new MisRepository(productionFixture(), productionConfig()))->findEligibleStudent(Nic::parse('891234567V'));
+    assertTrue($student !== null, 'a library hold wrongly blocked the student');
+});
+
+test('refuses a candidate on another programme', function (): void {
+    assertSame(null, (new MisRepository(productionFixture(), productionConfig()))->findEligibleStudent(Nic::parse('199512304567')));
+});
+
+test('refuses a candidate whose status is not active', function (): void {
+    assertSame(null, (new MisRepository(productionFixture(), productionConfig()))->findEligibleStudent(Nic::parse('801234567V')));
 });
 
 echo "\nRate limiting\n";

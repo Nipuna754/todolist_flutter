@@ -1,3 +1,7 @@
 /vendor/
 /config/config.php
-/var/
+
+# var/ holds the audit log and the rate-limit counters at runtime. The
+# directory itself ships, with the .htaccess that keeps it off the web.
+/var/*
+!/var/.htaccess

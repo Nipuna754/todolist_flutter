@@ -12,11 +12,20 @@ namespace Cdce\ExamApplication;
  */
 final class RateLimiter
 {
-    public function __construct(
-        private readonly string $directory,
-        private readonly int $maxAttempts,
-        private readonly int $windowSeconds,
-    ) {
+    /** @var string */
+    private $directory;
+
+    /** @var int */
+    private $maxAttempts;
+
+    /** @var int */
+    private $windowSeconds;
+
+    public function __construct(string $directory, int $maxAttempts, int $windowSeconds)
+    {
+        $this->directory = $directory;
+        $this->maxAttempts = $maxAttempts;
+        $this->windowSeconds = $windowSeconds;
     }
 
     public static function fromConfig(Config $config): self
@@ -24,7 +33,7 @@ final class RateLimiter
         return new self(
             $config->string('rate_limit.directory', dirname(__DIR__) . '/var/rate-limit'),
             $config->int('rate_limit.max_attempts', 10),
-            $config->int('rate_limit.window_seconds', 900),
+            $config->int('rate_limit.window_seconds', 900)
         );
     }
 

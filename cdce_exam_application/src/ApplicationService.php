@@ -9,12 +9,28 @@ namespace Cdce\ExamApplication;
  */
 final class ApplicationService
 {
+    /** @var Config */
+    private $config;
+
+    /** @var MisRepository */
+    private $repository;
+
+    /** @var RateLimiter */
+    private $rateLimiter;
+
+    /** @var AuditLog|null */
+    private $log;
+
     public function __construct(
-        private readonly Config $config,
-        private readonly MisRepository $repository,
-        private readonly RateLimiter $rateLimiter,
-        private readonly ?AuditLog $log = null,
+        Config $config,
+        MisRepository $repository,
+        RateLimiter $rateLimiter,
+        ?AuditLog $log = null
     ) {
+        $this->config = $config;
+        $this->repository = $repository;
+        $this->rateLimiter = $rateLimiter;
+        $this->log = $log;
     }
 
     public static function boot(Config $config): self
@@ -47,27 +63,35 @@ final class ApplicationService
         try {
             $nic = Nic::parse($rawNic);
         } catch (\InvalidArgumentException $e) {
-            throw new DownloadException($e->getMessage(), previous: $e);
+            throw new DownloadException($e->getMessage(), 0, $e);
         }
 
         try {
             $student = $this->repository->findEligibleStudent($nic);
         } catch (AmbiguousStudentException $e) {
-            $this->log?->write('ambiguous', $nic->masked());
+            if ($this->log !== null) {
+                $this->log->write('ambiguous', $nic->masked());
+            }
             throw new DownloadException(
                 'Your National ID number matches more than one record. Please contact the CDCE office so that it can be corrected.',
-                previous: $e
+                0,
+                $e
             );
         } catch (\PDOException $e) {
-            $this->log?->write('mis-error', $nic->masked(), $e->getMessage());
+            if ($this->log !== null) {
+                $this->log->write('mis-error', $nic->masked(), $e->getMessage());
+            }
             throw new DownloadException(
                 'The student records system could not be reached. Please try again shortly.',
-                previous: $e
+                0,
+                $e
             );
         }
 
         if ($student === null) {
-            $this->log?->write('not-found', $nic->masked());
+            if ($this->log !== null) {
+                $this->log->write('not-found', $nic->masked());
+            }
             throw new DownloadException(
                 'No candidate eligible for this examination was found under that National ID number. '
                 . 'Check the number you entered, and contact the CDCE office if it is correct.'
@@ -76,7 +100,9 @@ final class ApplicationService
 
         $missing = $student->missingFields();
         if ($missing !== []) {
-            $this->log?->write('incomplete', $nic->masked(), implode(', ', $missing));
+            if ($this->log !== null) {
+                $this->log->write('incomplete', $nic->masked(), implode(', ', $missing));
+            }
             throw new DownloadException(sprintf(
                 'Your record is missing: %s. The application cannot be printed until the CDCE office completes it.',
                 implode(', ', $missing)
@@ -89,12 +115,14 @@ final class ApplicationService
         ));
         $pdf->render($student);
 
-        $this->log?->write('issued', $nic->masked(), $student->registrationNo);
+        if ($this->log !== null) {
+            $this->log->write('issued', $nic->masked(), $student->registrationNo);
+        }
 
         return new GeneratedApplication(
             sprintf('BA-100-Level-2026-%s.pdf', $student->slug()),
             $pdf->toBinaryString(),
-            $student,
+            $student
         );
     }
 }

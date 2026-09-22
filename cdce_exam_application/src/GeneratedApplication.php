@@ -6,10 +6,19 @@ namespace Cdce\ExamApplication;
 
 final class GeneratedApplication
 {
-    public function __construct(
-        public readonly string $filename,
-        public readonly string $contents,
-        public readonly StudentRecord $student,
-    ) {
+    /** @var string */
+    public $filename;
+
+    /** @var string */
+    public $contents;
+
+    /** @var StudentRecord */
+    public $student;
+
+    public function __construct(string $filename, string $contents, StudentRecord $student)
+    {
+        $this->filename = $filename;
+        $this->contents = $contents;
+        $this->student = $student;
     }
 }

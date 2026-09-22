@@ -1,25 +1,59 @@
-# Only needed when this package sits INSIDE the web document root, i.e. the
-# files are at /.../tools/apply_examination2/ and the URL reaches them
-# directly. If your Apache config Aliases the URL to this package's public/
-# directory instead, that is safer and this file is not used.
+# ============================================================================
+# /usr/local/www/cdce.pdn.ac.lk/tools/apply_examination2/.htaccess
 #
-# Everything except public/ is denied, and requests are rewritten into public/
-# so the URL stays /tools/apply_examination2/ with no /public/ in it.
+# The whole package sits INSIDE the document root, so this file is the only
+# thing keeping the MIS password and the audit log off the web. Apache 2.4,
+# mod_rewrite, AllowOverride All.
+#
+# Two jobs:
+#   1. deny every directory except public/
+#   2. rewrite /tools/apply_examination2/ into public/, so the URL keeps its
+#      present shape and index.php is served without /public/ appearing in it
+#
+# The <If> below tests REQUEST_URI, which is the URL as the browser sent it,
+# after Apache has normalised away ./ and ../ segments. Authorization is
+# evaluated before the per-directory rewrite runs, so a request for
+# config/config.php is refused before it can be rewritten.
+#
+# The match is case-insensitive. FreeBSD UFS and ZFS are case-sensitive, so
+# /CONFIG/ would not resolve anyway - but if this package is ever copied onto
+# a case-insensitive filesystem, a case-sensitive rule here would become a
+# way straight past it.
+# ============================================================================
 
-Options -Indexes
+Options -Indexes -MultiViews
+DirectoryIndex index.php
 
+# ---------------------------------------------------------------- deny first
+<If "%{REQUEST_URI} =~ m#^/tools/apply_examination2/(config|var|src|vendor|templates|tools|tests|docs)(/|$)#i">
+    Require all denied
+</If>
+
+<FilesMatch "\.(md|lock|log|sqlite|sql|dist|example)$">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "^(composer\.json|composer\.lock|\.gitignore)$">
+    Require all denied
+</FilesMatch>
+
+# -------------------------------------------------------------- then rewrite
 <IfModule mod_rewrite.c>
     RewriteEngine On
+    RewriteBase /tools/apply_examination2/
 
-    # config/ holds the MIS password, var/ holds the audit log. Never served.
-    RewriteRule ^(config|src|tools|tests|docs|var|vendor|templates)(/|$) - [F,L]
+    # Already inside public/: serve it, and stop - otherwise this loops.
+    RewriteRule ^public/ - [L]
 
-    # Send everything else into public/, once.
-    RewriteCond %{REQUEST_URI} !/public/
+    # Never let a rewritten path reach a denied directory.
+    RewriteRule ^(config|var|src|vendor|templates|tools|tests|docs)(/|$) - [F,L]
+
+    # Everything else is served from public/.
     RewriteRule ^(.*)$ public/$1 [L]
 </IfModule>
 
-# Belt and braces, in case mod_rewrite is unavailable.
-<FilesMatch "\.(json|lock|log|md|sqlite|txt)$">
+# If mod_rewrite were ever switched off, the bare directory would list the
+# package instead of serving the form. Fail closed rather than expose it.
+<IfModule !mod_rewrite.c>
     Require all denied
-</FilesMatch>
+</IfModule>

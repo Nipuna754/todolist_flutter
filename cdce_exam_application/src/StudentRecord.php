@@ -9,12 +9,28 @@ namespace Cdce\ExamApplication;
  */
 final class StudentRecord
 {
+    /** @var string */
+    public $registrationNo;
+
+    /** @var string */
+    public $nationalId;
+
+    /** @var string */
+    public $nameWithInitials;
+
+    /** @var string */
+    public $nameInFull;
+
     public function __construct(
-        public readonly string $registrationNo,
-        public readonly string $nationalId,
-        public readonly string $nameWithInitials,
-        public readonly string $nameInFull,
+        string $registrationNo,
+        string $nationalId,
+        string $nameWithInitials,
+        string $nameInFull
     ) {
+        $this->registrationNo = $registrationNo;
+        $this->nationalId = $nationalId;
+        $this->nameWithInitials = $nameWithInitials;
+        $this->nameInFull = $nameInFull;
     }
 
     /**
@@ -24,10 +40,10 @@ final class StudentRecord
     public static function fromRow(array $row): self
     {
         return new self(
-            self::clean((string) ($row['registration_no'] ?? '')),
-            self::tidyNationalId(self::clean((string) ($row['nic'] ?? ''))),
-            self::clean((string) ($row['name_with_initials'] ?? '')),
-            self::clean((string) ($row['name_in_full'] ?? '')),
+            self::clean((string) (isset($row['registration_no']) ? $row['registration_no'] : '')),
+            self::tidyNationalId(self::clean((string) (isset($row['nic']) ? $row['nic'] : ''))),
+            self::clean((string) (isset($row['name_with_initials']) ? $row['name_with_initials'] : '')),
+            self::clean((string) (isset($row['name_in_full']) ? $row['name_in_full'] : ''))
         );
     }
 
@@ -43,7 +59,9 @@ final class StudentRecord
      */
     private static function tidyNationalId(string $value): string
     {
-        return Nic::tryParse($value)?->value() ?? $value;
+        $nic = Nic::tryParse($value);
+
+        return $nic === null ? $value : $nic->value();
     }
 
     /**
@@ -53,8 +71,9 @@ final class StudentRecord
     private static function clean(string $value): string
     {
         $value = str_replace("\xC2\xA0", ' ', $value);
+        $squashed = preg_replace('/\s+/u', ' ', $value);
 
-        return trim(preg_replace('/\s+/u', ' ', $value) ?? '');
+        return trim($squashed === null ? $value : $squashed);
     }
 
     /**
@@ -83,8 +102,9 @@ final class StudentRecord
     /** A filename-safe form of the registration number, e.g. AE-BA-21-1234. */
     public function slug(): string
     {
-        $slug = preg_replace('/[^A-Za-z0-9]+/', '-', $this->registrationNo) ?? '';
+        $slug = preg_replace('/[^A-Za-z0-9]+/', '-', $this->registrationNo);
+        $slug = trim($slug === null ? '' : $slug, '-');
 
-        return trim($slug, '-') ?: 'application';
+        return $slug === '' ? 'application' : $slug;
     }
 }

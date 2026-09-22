@@ -22,10 +22,16 @@ final class MisRepository
     /** @var list<string> */
     private const LOGICAL_COLUMNS = ['registration_no', 'nic', 'name_with_initials', 'name_in_full'];
 
-    public function __construct(
-        private readonly \PDO $pdo,
-        private readonly Config $config,
-    ) {
+    /** @var \PDO */
+    private $pdo;
+
+    /** @var Config */
+    private $config;
+
+    public function __construct(\PDO $pdo, Config $config)
+    {
+        $this->pdo = $pdo;
+        $this->config = $config;
     }
 
     public static function connect(Config $config): self
@@ -131,7 +137,7 @@ final class MisRepository
         $map = [];
 
         foreach (self::LOGICAL_COLUMNS as $logical) {
-            $physical = $configured[$logical] ?? null;
+            $physical = isset($configured[$logical]) ? $configured[$logical] : null;
             if (!is_string($physical) || $physical === '') {
                 throw new \RuntimeException('Missing required configuration key: mis.columns.' . $logical);
             }

@@ -10,8 +10,12 @@ namespace Cdce\ExamApplication;
  */
 final class AuditLog
 {
-    public function __construct(private readonly string $path)
+    /** @var string */
+    private $path;
+
+    public function __construct(string $path)
     {
+        $this->path = $path;
     }
 
     public function write(string $event, string ...$details): void
@@ -20,7 +24,9 @@ final class AuditLog
             "%s\t%s\t%s\n",
             date('c'),
             $event,
-            implode("\t", array_map(static fn (string $d): string => str_replace(["\t", "\n"], ' ', $d), $details))
+            implode("\t", array_map(static function (string $d): string {
+                return str_replace(["\t", "\n"], ' ', $d);
+            }, $details))
         );
 
         $directory = dirname($this->path);

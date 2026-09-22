@@ -17,8 +17,13 @@ final class ApplicationPdf extends Fpdi
 {
     private const FONT = 'Helvetica';
 
-    public function __construct(private readonly string $templatePath)
+    /** @var string */
+    private $templatePath;
+
+    public function __construct(string $templatePath)
     {
+        $this->templatePath = $templatePath;
+
         parent::__construct('P', 'pt', [FormLayout::PAGE_WIDTH, FormLayout::PAGE_HEIGHT]);
 
         $this->SetAutoPageBreak(false);

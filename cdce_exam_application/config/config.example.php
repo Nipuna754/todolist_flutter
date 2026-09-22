@@ -3,6 +3,8 @@
 /**
  * Copy to config/config.php and fill in for this server.
  * config/config.php is git-ignored - it holds the MIS credentials.
+ *
+ * Target: PHP 7.4 (FreeBSD jail, Apache 2.4 + mod_php).
  */
 
 declare(strict_types=1);
@@ -17,43 +19,43 @@ return [
     ],
 
     /**
-     * The CDCE MIS at http://10.40.129.2/cdcesys/mis_1/.
+     * The CDCE MIS at http://10.40.129.2/cdcesys/mis_1/ - MySQL 5.5.38.
      *
-     * Use an account with SELECT on the student table and nothing else - this
-     * tool never writes to the MIS.
-     *
-     * The identifiers below are placeholders. Replace them with the real table
-     * and column names; `php tools/check_mis.php` verifies them before you go
-     * live.
+     * The account must have SELECT on tblstudent and tbl_hold and nothing
+     * else; this tool never writes to the MIS.
      */
     'mis' => [
-        'dsn' => 'mysql:host=10.40.129.2;port=3306;dbname=cdcesys;charset=utf8mb4',
-        'username' => 'cdce_readonly',
-        'password' => '',
+        'dsn' => 'mysql:host=10.40.129.2;port=3306;dbname=dbcdce2;charset=utf8mb4',
+        'username' => 'cdce_apply_ro',
+        'password' => '',           // <-- set this, then chmod 640
         'timeout_seconds' => 10,
 
-        'table' => 'student',
+        'table' => 'tblstudent',
 
         'columns' => [
             'registration_no' => 'reg_no',
-            'nic' => 'nic_no',
-            'name_with_initials' => 'name_with_initials',
-            'name_in_full' => 'name_in_full',
+            'nic' => 'nic',
+            'name_with_initials' => 'name_ini',
+            'name_in_full' => 'full_name',
         ],
 
         /**
-         * Restricts the lookup to candidates entitled to this application.
+         * Restricts the lookup to candidates entitled to this application:
+         * on the BA programme, active, and not under an open offence hold.
+         *
          * Without it, any student in the MIS could download a 100 Level repeat
          * form. Named parameters are bound, so put values in `params`, never in
-         * the SQL text.
+         * the SQL text. The subquery is correlated to the outer table by name,
+         * so `tblstudent` here must match the `table` key above.
          */
         'eligibility' => [
-            'sql' => 'course = :course AND level = :level AND academic_year = :year AND status = :status',
+            'sql' => 'program_id = :program AND status = :status AND NOT EXISTS '
+                . '(SELECT 1 FROM tbl_hold h WHERE h.student_id = tblstudent.student_id '
+                . 'AND h.type = :hold_type AND h.hold_status = 1)',
             'params' => [
-                'course' => 'BA',
-                'level' => 100,
-                'year' => '2026',
-                'status' => 'ACTIVE',
+                'program' => 1,
+                'status' => 'active',
+                'hold_type' => 'offence',
             ],
         ],
     ],
@@ -63,6 +65,18 @@ return [
         'max_attempts' => 10,
         'window_seconds' => 900,
     ],
+
+    /**
+     * One-time web check (public/setup_check.php), used because the jail has no
+     * PHP command line. Set a long random token, run the check, then DELETE
+     * public/setup_check.php. Leaving it in place with a token set is a
+     * standing invitation to anyone who guesses the token.
+     *
+     * Generate one on any machine:  openssl rand -hex 32
+     *
+     * An empty value disables the page outright.
+     */
+    'setup_token' => '',
 
     'template' => dirname(__DIR__) . '/templates/ba_100_level_2026.pdf',
     'log_file' => dirname(__DIR__) . '/var/download.log',

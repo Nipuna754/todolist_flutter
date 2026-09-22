@@ -17,10 +17,16 @@ namespace Cdce\ExamApplication;
  */
 final class Nic
 {
-    private function __construct(
-        private readonly string $normalised,
-        private readonly bool $isNew,
-    ) {
+    /** @var string */
+    private $normalised;
+
+    /** @var bool */
+    private $isNew;
+
+    private function __construct(string $normalised, bool $isNew)
+    {
+        $this->normalised = $normalised;
+        $this->isNew = $isNew;
     }
 
     /**
@@ -31,7 +37,8 @@ final class Nic
      */
     public static function parse(string $raw): self
     {
-        $value = strtoupper(preg_replace('/[\s\-]+/', '', $raw) ?? '');
+        $stripped = preg_replace('/[\s\-]+/', '', $raw);
+        $value = strtoupper($stripped === null ? '' : $stripped);
 
         if (preg_match('/^(\d{9})[VX]$/', $value, $m) === 1) {
             self::assertDayOfYear((int) substr($m[1], 2, 3));
@@ -58,7 +65,7 @@ final class Nic
     {
         try {
             return self::parse($raw);
-        } catch (\InvalidArgumentException) {
+        } catch (\InvalidArgumentException $e) {
             return null;
         }
     }

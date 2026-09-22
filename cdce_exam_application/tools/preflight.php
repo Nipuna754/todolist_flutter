@@ -24,8 +24,8 @@ function line(string $status, string $label, string $detail = ''): void
 echo "Server\n", str_repeat('-', 60), PHP_EOL;
 
 line(
-    PHP_VERSION_ID >= 80000 ? 'OK' : 'FAIL',
-    'PHP 8.0 or newer',
+    PHP_VERSION_ID >= 70400 ? 'OK' : 'FAIL',
+    'PHP 7.4 or newer',
     PHP_VERSION
 );
 

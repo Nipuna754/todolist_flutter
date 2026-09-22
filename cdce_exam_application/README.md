@@ -15,6 +15,11 @@ Those four are read from the CDCE MIS (`http://10.40.129.2/cdcesys/mis_1/`).
 Everything else on the form is left blank for the student to complete by hand,
 including the correction grids under each name.
 
+**Target server:** FreeBSD 12.2 jail, Apache 2.4 + mod_php **7.4**, package
+inside the document root at
+`/usr/local/www/cdce.pdn.ac.lk/tools/apply_examination2/`, no CLI access. See
+[DEPLOY.md](DEPLOY.md).
+
 **Deployment status:** nothing is deployed yet and no CDCE system has been
 changed — see [DEPLOY-STATUS.md](DEPLOY-STATUS.md).
 
@@ -23,20 +28,21 @@ changed — see [DEPLOY-STATUS.md](DEPLOY-STATUS.md).
 This module was written without access to the CDCE network, so two things are
 **placeholders that must be set to the real values** before it goes live:
 
-- **The MIS schema.** `config/config.example.php` guesses at `student`,
-  `reg_no`, `nic_no`, `name_with_initials`, `name_in_full`. Replace them with
-  the real table and column names.
-- **The eligibility rule.** `mis.eligibility.sql` decides who is entitled to a
-  100 Level repeat form for 2026. The example clause is a guess. Get this wrong
-  in the permissive direction and any student in the MIS can pull a form.
+- **The MIS password** for `cdce_apply_ro`, and **`setup_token`** for the
+  one-time web check. Everything else in `config/config.example.php` is now
+  the real `dbcdce2` schema.
+- **The eligibility rule is already written** (BA programme, active, no open
+  offence hold) and covered by tests, but it has never been run against the
+  live MIS. Confirm the candidate count it selects looks right before opening
+  the tool to students.
 
-`php tools/check_mis.php` verifies both against the live MIS before you open
-the tool to students. Nothing in this module writes to the MIS.
+`public/setup_check.php` verifies both from the browser, because the target
+jail has no PHP command line. Nothing in this module writes to the MIS.
 
 ## Requirements
 
-- PHP 8.0+ with `pdo`, and `pdo_mysql` for the MIS
-- Composer
+- PHP 7.4+ with `pdo` and `pdo_mysql` (tested on 7.4.33 and 8.4; the release
+  archive bundles `vendor/`, so Composer is only needed from a checkout)
 - Network access from the web server to the MIS host
 
 ## Install
@@ -119,7 +125,9 @@ src/FormLayout.php          the coordinates — the only file a layout change to
 src/RateLimiter.php         per-client attempt cap
 src/AuditLog.php            append-only issue log, NICs masked
 templates/                  the registrar's blank form, unchanged
-tools/preflight.php         check the server can run it, before any config
+public/setup_check.php      one-time web check for a server with no CLI - DELETE after use
+src/compat.php              PHP 8 string helpers polyfilled for 7.4
+tools/preflight.php         check the server can run it, before any config (needs CLI)
 tools/calibrate.php         render a sample without the MIS
 tools/check_mis.php         verify the config against the live MIS
 tools/try_nic.php           show how a NIC is parsed, no database needed
@@ -135,7 +143,7 @@ docs/template-geometry.md   where every coordinate came from
 php tests/run.php
 ```
 
-32 tests, no test framework needed. The MIS tests run against an in-memory
+38 tests, no test framework needed. The MIS tests run against an in-memory
 SQLite database shaped like the MIS table, so the suite passes off the CDCE
 network. They cover NIC conversion in both directions, matching a NIC stored in
 the other format or with stray spaces, the eligibility filter turning away a
