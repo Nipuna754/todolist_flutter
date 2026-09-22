@@ -1,0 +1,2 @@
+# The audit log and the rate-limit counters live here. Never web-reachable.
+Require all denied

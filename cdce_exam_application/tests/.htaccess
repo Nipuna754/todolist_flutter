@@ -1,0 +1,4 @@
+# Never web-reachable. Denied here as well as in the package's top-level
+# .htaccess, so that a rewrite module switched off, or an AllowOverride change,
+# cannot expose credentials, the audit log or the MIS lookup code.
+Require all denied
